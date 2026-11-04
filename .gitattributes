@@ -1,0 +1,2 @@
+# Preserve the vendor sample byte-for-byte, including CRLF line endings.
+tests/fixtures/hiti-magnetic.txt -text

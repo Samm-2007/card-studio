@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.*
+.DS_Store
+*.log
+.scratch/
+
+# Local vendor reference installers
+/CardDesireeCS_v1.0.47.24/
+/*.exe
