@@ -135,7 +135,9 @@ const server = Bun.serve({
           return new Response(Bun.file(join(buildDir, url.pathname.slice(1))));
         if (
           url.pathname === "/reference/madar-front.png" ||
-          url.pathname === "/reference/madar-back.png"
+          url.pathname === "/reference/madar-back.png" ||
+          url.pathname === "/reference/university-front.png" ||
+          url.pathname === "/reference/university-back.png"
         )
           return new Response(
             Bun.file(
@@ -166,11 +168,15 @@ const server = Bun.serve({
               options: await capabilities(printer.name).catch(() => []),
             })),
           );
+          const defaultPrinter = await command("/usr/bin/lpstat", ["-d"])
+            .then((output) => output.match(/system default destination:\s*(\S+)/)?.[1] ?? null)
+            .catch(() => null);
           return json({
             token,
             driverInstalled,
             utilityInstalled,
             printers: queues,
+            defaultPrinter,
             error,
           });
         }

@@ -50,6 +50,26 @@ portrait artwork remains upright. Printing does not use the browser's A4/Letter 
 The preview and exported artwork are 1011 × 638 pixels (landscape) or 638 × 1011 (portrait),
 approximately 300 dpi. The HiTi PPD's raster media size is 154.09 × 243.37 points.
 
+## Jundi-Shapur university card
+
+Choose **کارت دانشجویی جندی‌شاپور** or open
+**http://localhost:3217/?layout=university**. The landscape CR80 preset recreates both sides
+of the supplied card: the front artwork is perspective-corrected and retouched to remove the
+original portrait and personal text; the back geometry is rebuilt with separate editable text.
+The reference photographs themselves are not included in the repository.
+
+Enter student number, full name, father name, faculty, degree and expiry in the Persian fields.
+Use **انتخاب عکس پرسنلی** to replace the portrait in its existing frame without stretching it.
+Zoom and horizontal/vertical sliders adjust its crop. Use Back and the layer controls to edit
+university contact text. All personal fields and the portrait remain editable layers with
+millimeter positioning. PNG, PDF and printing include the fixed artwork and new details.
+This preset is intended for blank card stock, rather than text-only overprinting.
+
+Layout autosave excludes personal text and portrait data, including duplicated private layers.
+Download an editable design JSON from Export to deliberately retain the entered details and
+photo. The built-in background identifier is retained when converting to a free layout, and is
+cleared when choosing a different preset.
+
 ## Save and export
 
 The current design auto-saves in this browser's local storage. Export an editable `.card.json`

@@ -51,6 +51,8 @@ import {
 import { LayoutControls, LayoutOverlay } from "./LayoutEditor";
 import { MagneticPanel } from "./MagneticPanel";
 import { MadarFields } from "./MadarFields";
+import { UniversityFields } from "./UniversityFields";
+import { updateUniversityPhoto, UNIVERSITY_PHOTO_ID } from "./university";
 import { designForAutosave } from "./madar";
 import { referencePreview } from "./reference";
 import {
@@ -68,6 +70,7 @@ type Status = {
   driverInstalled: boolean;
   utilityInstalled: boolean;
   printers: Device[];
+  defaultPrinter?: string | null;
   error: string | null;
 };
 type Job = {
@@ -86,6 +89,7 @@ const templates: {
   description: string;
   badge: string;
 }[] = [
+  { id: "university", name: "کارت دانشجویی جندی‌شاپور", description: "UNIVERSITY · TWO-SIDED", badge: "دانشجو" },
   {
     id: "madar",
     name: "Your Madar card",
@@ -119,6 +123,8 @@ const templates: {
 ];
 const storageKey = "hiti-card-studio-design-v1";
 function initialDesign() {
+  if (new URLSearchParams(window.location.search).get("layout") === "university")
+    return templateDesign("university", DEFAULT_DESIGN);
   if (new URLSearchParams(window.location.search).get("layout") === "madar")
     return templateDesign("madar", DEFAULT_DESIGN);
   try {
@@ -159,7 +165,7 @@ const readable: Record<string, Record<string, string>> = {
 function App() {
   const [design, setDesign] = useState<Design>(initialDesign);
   const [selectedElement, setSelectedElement] = useState("");
-  const isFree = design.template === "custom" || design.template === "madar";
+  const isFree = design.template === "custom" || design.template === "madar" || design.template === "university";
   const [showReference, setShowReference] = useState(true);
   const [previews, setPreviews] = useState({ front: "", back: "" });
   const dims = cardDimensions(design.orientation);
@@ -203,7 +209,7 @@ function App() {
   const uploadRef = useRef<HTMLInputElement>(null);
   const projectRef = useRef<HTMLInputElement>(null);
   const uploadTarget = useRef<
-    "logo" | "frontArtwork" | "backArtwork" | "element"
+    "logo" | "frontArtwork" | "backArtwork" | "element" | "university-photo"
   >("logo");
   const printer = status?.printers.find((p) => p.name === selectedPrinter);
   const artworkKey = side === "front" ? "frontArtwork" : "backArtwork";
@@ -239,6 +245,10 @@ function App() {
     setTab("content");
     setView("design");
     setSide(template === "madar" ? "back" : "front");
+    if (template === "university") {
+      setPrintSide("front");
+      setSettings((previous) => ({ ...previous, CardType: "0" }));
+    }
     if (template === "madar") {
       setSettings((previous) => ({
         ...previous,
@@ -291,7 +301,8 @@ function App() {
       setSelectedPrinter((previous) =>
         data.printers.some((p) => p.name === previous)
           ? previous
-          : data.printers[0]?.name || "",
+          : data.printers.find((p) => p.name === data.defaultPrinter)?.name ||
+            data.printers[0]?.name || "",
       );
     } catch (err) {
       notify((err as Error).message, true);
@@ -318,6 +329,8 @@ function App() {
   }, [view]);
   useEffect(() => {
     const defaults = {
+      CardType: printer?.options.find((o) => o.key === "CardType")?.defaultValue ?? "0",
+      CardThick: printer?.options.find((o) => o.key === "CardThick")?.defaultValue ?? "2",
       RibbonType:
         printer?.options.find((o) => o.key === "RibbonType")?.defaultValue ??
         "YMCKO",
@@ -467,7 +480,13 @@ function App() {
         const data = c.toDataURL(logo ? "image/png" : "image/jpeg", 0.94);
         if (data.length > 2_500_000)
           throw new Error("This image is too detailed. Try a smaller version.");
-        if (uploadTarget.current === "element") {
+        if (uploadTarget.current === "university-photo") {
+          if (!design.elements.some((element) => element.id === UNIVERSITY_PHOTO_ID) && design.elements.length >= 80)
+            throw new Error("A design can contain up to 80 elements.");
+          update({ elements: updateUniversityPhoto(design, data) });
+          setSide("front");
+          setSelectedElement(UNIVERSITY_PHOTO_ID);
+        } else if (uploadTarget.current === "element") {
           const base = isFree ? design : customDesign(design);
           if (base.elements.length >= 80)
             throw new Error("A design can contain up to 80 elements.");
@@ -482,7 +501,9 @@ function App() {
           setSelectedElement(element.id);
         } else update({ [uploadTarget.current]: data });
         notify(
-          logo
+          uploadTarget.current === "university-photo"
+            ? "عکس پرسنلی جایگزین شد؛ کادر و تناسب عکس حفظ شده است."
+            : logo
             ? "Logo added to both sides."
             : uploadTarget.current === "element"
               ? "Image added. Drag it into position."
@@ -1197,6 +1218,11 @@ function App() {
                           update={update}
                           select={setSelectedElement}
                         />
+                      )}
+                      {design.template === "university" && (
+                        <UniversityFields design={design} update={update}
+                          select={(id) => { setSelectedElement(id); setSide("front"); }}
+                          upload={() => chooseImage("university-photo")} />
                       )}
                       <LayoutControls
                         design={design}

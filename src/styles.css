@@ -2548,3 +2548,14 @@ h1 > span {
   text-align: left;
 }
 .magnetic-fields input[aria-invalid="true"] { border-color: #ba3939; }
+
+.university-fields {
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #e1e8d7;
+}
+.university-fields .section-label { letter-spacing: 0; line-height: 1.8; }
+.university-fields .field input { font-family: Tahoma, sans-serif; font-size: 12px; }
+.university-photo-controls { display: grid; gap: 10px; margin: 16px 0 22px; }
+.university-photo-controls .field { margin: 0; }
+.university-photo-controls input[type="range"] { padding: 0; accent-color: #769260; }

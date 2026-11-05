@@ -1,9 +1,10 @@
 import { CARD } from "./pdf";
 import { madarDesign } from "./madar";
+import { universityDesign } from "./university";
 
 export type Side = "front" | "back";
 export type Template =
-  "membership" | "business" | "minimal" | "custom" | "madar";
+  "membership" | "business" | "minimal" | "custom" | "madar" | "university";
 export type LayoutElement = {
   id: string;
   side: Side;
@@ -21,10 +22,16 @@ export type LayoutElement = {
   align: "left" | "center" | "right";
   rotation: number;
   private?: boolean;
+  imageFit?: "stretch" | "cover";
+  imageZoom?: number;
+  imageOffsetX?: number;
+  imageOffsetY?: number;
+  singleLine?: boolean;
 };
 export type Design = {
   version: 1;
   template: Template;
+  background: "none" | "university";
   name: string;
   brand: string;
   subtitle: string;
@@ -46,6 +53,7 @@ export type Design = {
 export const DEFAULT_DESIGN: Design = {
   version: 1,
   template: "membership",
+  background: "none",
   brand: "ATELIER",
   name: "Alex Morgan",
   subtitle: "FOUNDING MEMBER",
@@ -104,7 +112,7 @@ export function customDesign(
 ): Design {
   const portrait = orientation === "portrait";
   const elements =
-    (current.template === "custom" || current.template === "madar") && !blank
+    (current.template === "custom" || current.template === "madar" || current.template === "university") && !blank
       ? current.elements
       : blank
         ? []
@@ -169,7 +177,7 @@ export function validateDesign(value: unknown): Design {
   const d = value as Record<string, unknown>;
   if (
     d.version !== 1 ||
-    !["membership", "business", "minimal", "custom", "madar"].includes(
+    !["membership", "business", "minimal", "custom", "madar", "university"].includes(
       String(d.template),
     )
   )
@@ -192,6 +200,8 @@ export function validateDesign(value: unknown): Design {
           (d[key] as string).length > 2_500_000))
     )
       throw new Error("Invalid design image.");
+  if (d.background !== undefined && !["none", "university"].includes(String(d.background)))
+    throw new Error("Invalid built-in card background.");
   const orientation = d.orientation ?? "landscape";
   if (orientation !== "landscape" && orientation !== "portrait")
     throw new Error("Invalid card orientation.");
@@ -214,6 +224,14 @@ export function validateDesign(value: unknown): Design {
       throw new Error("Invalid layout element.");
     if (e.private !== undefined && typeof e.private !== "boolean")
       throw new Error("Invalid element privacy flag.");
+    if (e.imageFit !== undefined && !["stretch", "cover"].includes(e.imageFit))
+      throw new Error("Invalid image fitting mode.");
+    if (e.singleLine !== undefined && typeof e.singleLine !== "boolean")
+      throw new Error("Invalid text fitting mode.");
+    for (const [key, min, max] of [["imageZoom", 1, 3], ["imageOffsetX", -1, 1], ["imageOffsetY", -1, 1]] as const) {
+      if (e[key] !== undefined && (typeof e[key] !== "number" || !Number.isFinite(e[key]) || e[key] < min || e[key] > max))
+        throw new Error("Invalid image crop settings.");
+    }
     ids.add(e.id);
     for (const key of ["x", "y", "width", "height", "fontSize", "rotation"])
       if (
@@ -257,11 +275,13 @@ export function validateDesign(value: unknown): Design {
 }
 export function templateDesign(template: Template, current: Design): Design {
   if (template === "madar") return madarDesign(current);
+  if (template === "university") return universityDesign(current);
   if (template === "custom")
-    return customDesign(current, current.orientation, true);
+    return { ...customDesign(current, current.orientation, true), background: "none" };
   return {
     ...current,
     template,
+    background: "none",
     orientation: "landscape",
     frontArtwork: "",
     backArtwork: "",
@@ -305,7 +325,7 @@ export async function renderCard(
   side: Side,
 ): Promise<HTMLCanvasElement> {
   const canvas =
-    d.template === "custom" || d.template === "madar"
+    d.template === "custom" || d.template === "madar" || d.template === "university"
       ? await renderCustom(d, side)
       : await renderTemplate(d, side);
   if (d.monochrome) {
@@ -337,6 +357,16 @@ async function renderCustom(d: Design, side: Side): Promise<HTMLCanvasElement> {
   const scale = dims.width / dims.widthMm;
   ctx.fillStyle = d.paper;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (d.background === "university") {
+    const background = await loadImage(`/reference/university-${side}.png`);
+    ctx.save();
+    if (d.orientation === "portrait") {
+      ctx.translate(canvas.width, 0);
+      ctx.rotate(Math.PI / 2);
+      ctx.drawImage(background, 0, 0, canvas.height, canvas.width);
+    } else ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
+    ctx.restore();
+  }
   const art = side === "front" ? d.frontArtwork : d.backArtwork;
   if (art) {
     const img = await loadImage(art);
@@ -360,7 +390,15 @@ async function renderCustom(d: Design, side: Side): Promise<HTMLCanvasElement> {
     ctx.fillStyle = e.color;
     if (e.kind === "image" && e.src) {
       const image = await loadImage(e.src);
-      ctx.drawImage(image, 0, 0, e.width * scale, e.height * scale);
+      if (e.imageFit === "cover") {
+        const frameWidth = e.width * scale;
+        const frameHeight = e.height * scale;
+        const factor = Math.max(frameWidth / image.width, frameHeight / image.height) * (e.imageZoom ?? 1);
+        const width = image.width * factor;
+        const height = image.height * factor;
+        ctx.drawImage(image, (frameWidth - width) / 2 + (e.imageOffsetX ?? 0) * (width - frameWidth) / 2,
+          (frameHeight - height) / 2 + (e.imageOffsetY ?? 0) * (height - frameHeight) / 2, width, height);
+      } else ctx.drawImage(image, 0, 0, e.width * scale, e.height * scale);
     } else if (e.kind === "rect")
       ctx.fillRect(0, 0, e.width * scale, e.height * scale);
     else {
@@ -385,6 +423,11 @@ async function renderCustom(d: Design, side: Side): Promise<HTMLCanvasElement> {
             ? (e.width * scale) / 2
             : 0;
       const lines: string[] = [];
+      if (e.singleLine) {
+        ctx.fillText(e.text.replace(/[\r\n]/g, " "), x, 0, e.width * scale);
+        ctx.restore();
+        continue;
+      }
       for (const paragraph of e.text.split("\n")) {
         let line = "";
         for (const word of paragraph.split(" ")) {

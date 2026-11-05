@@ -47,6 +47,7 @@ export function madarDesign(current: Design): Design {
   return {
     ...current,
     template: "madar",
+    background: "none",
     orientation: "portrait",
     monochrome: current.monochrome,
     brand: "Madar",
@@ -156,7 +157,9 @@ export function designForAutosave(design: Design): Design {
     tagline: "",
     website: "",
     elements: design.elements.map((e) =>
-      e.kind === "text" &&
+      e.private && e.kind === "image"
+        ? { ...e, src: "" }
+        : e.kind === "text" &&
       (e.private ||
         MADAR_PERSONAL_IDS.includes(e.id) ||
         (isMadar &&
