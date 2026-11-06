@@ -18,39 +18,40 @@ export function MadarFields({
   return (
     <div className="madar-fields">
       <div className="section-label">
-        YOUR PREPRINTED CARD<span>BACK · PORTRAIT</span>
+        مشخصات کارت<span>پشت کارت</span>
       </div>
       <p className="inspector-description">
-        Matches your example. Enter the details, then adjust any text box below.
-        The existing stripe and logo are guides only.
+        نام و نام خانوادگی و شماره کارت را وارد کن.
       </p>
       <label className="field">
-        <span>نام دارنده / holder name</span>
-        <textarea
+        <span>نام و نام خانوادگی</span>
+        <input
+          type="text"
           dir="rtl"
-          rows={3}
           autoComplete="off"
           maxLength={100}
           value={madarFieldValue(design, "holder")}
-          placeholder={"نام\nنام خانوادگی\nنام تکمیلی"}
+          placeholder="نام و نام خانوادگی"
           onChange={(e) => change("holder", e.target.value)}
         />
       </label>
       <label className="field">
-        <span>شماره کارت / card number</span>
+        <span>Card / member number</span>
         <input
           dir="ltr"
           inputMode="numeric"
           autoComplete="off"
-          maxLength={24}
+          maxLength={19}
           value={madarFieldValue(design, "number")}
-          placeholder="16 digits"
+          placeholder="شماره کارت (تا ۱۶ رقم)"
           onChange={(e) => change("number", e.target.value)}
         />
         <small>
-          Shown as four groups, stacked vertically in Persian digits.
+          همین شماره به نوار مغناطیسی ارسال می‌شود.
         </small>
       </label>
+      <details>
+        <summary>مشخصات تکمیلی (اختیاری)</summary>
       <div className="two-fields">
         <label className="field">
           <span>تاریخ / expiry</span>
@@ -78,6 +79,7 @@ export function MadarFields({
           />
         </label>
       </div>
+      </details>
       <p className="madar-memory-note">
         Layout auto-saves. Entered card details stay in this tab and are cleared
         on reload.

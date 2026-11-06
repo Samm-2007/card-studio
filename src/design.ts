@@ -2,6 +2,8 @@ import { CARD } from "./pdf";
 import { madarDesign } from "./madar";
 import { universityDesign } from "./university";
 
+import { elementId } from "./id";
+
 export type Side = "front" | "back";
 export type Template =
   "membership" | "business" | "minimal" | "custom" | "madar" | "university";
@@ -87,7 +89,7 @@ export function createElement(
   patch: Partial<LayoutElement> = {},
 ): LayoutElement {
   return {
-    id: crypto.randomUUID(),
+    id: elementId(),
     side,
     kind: "text",
     text: "Your text",

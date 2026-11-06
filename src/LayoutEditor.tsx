@@ -1,4 +1,5 @@
 import React, { useRef, useState } from "react";
+import { elementId } from "./id";
 import {
   ArrowDown,
   ArrowUp,
@@ -178,7 +179,7 @@ export function LayoutControls({
                 onClick={() => {
                   const e = {
                     ...element,
-                    id: crypto.randomUUID(),
+                    id: elementId(),
                     x: Math.min(element.x + 2, dims.widthMm - 4),
                     y: Math.min(element.y + 2, dims.heightMm - 4),
                   };

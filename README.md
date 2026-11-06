@@ -13,7 +13,42 @@ bun run start
 You can also double-click **Start Card Studio.command** in this folder.
 
 Open **http://localhost:3217**. Keep the terminal running. To choose another port, set
-`CARD_STUDIO_PORT` when starting the app. The server binds only to `127.0.0.1`.
+`CARD_STUDIO_PORT` when starting the app. By default the server binds only to `127.0.0.1`.
+
+## Connect from Windows on your local network
+
+On the Mac, stop an existing server with Control-C, then run:
+
+```sh
+bun run start:lan
+```
+
+The terminal lists the Mac's private IPv4 addresses. On Windows, connect to the same local
+network and open the listed `http://<Mac-IP>:3217/?layout=madar` address in a browser.
+Sign in with username **cardstudio** and the password in `.scratch/lan-password.txt` on the Mac.
+The password is generated on first LAN launch, reused across restarts, and excluded from Git.
+Connections from the Mac itself do not need this login. Use this HTTP mode only on a trusted
+local network; HTTP does not encrypt credentials or card data. Do not forward the port on your router.
+Allow incoming connections for Bun if macOS Firewall prompts. Guest Wi-Fi/client isolation can
+prevent computers from reaching each other. The address may change when the Mac changes networks.
+
+Keep the Mac and server running. To return to Mac-only access, stop the server and use `bun run start`.
+Remote requests must authenticate before accessing the app or API; Host/Origin checks and the
+per-process token for printer actions remain enabled.
+
+Choose **همین کامپیوتر — چاپگر USB ویندوز / مرورگر** in the Print card dialog to print on the
+computer running the browser. Windows browsers select this route by default. This opens the
+local browser print dialog with one CR80 artwork page, without submitting a job to the Mac.
+Choose the installed Windows HiTi printer, CR80 paper, 100%/actual size, zero margins and no
+headers/footers. Set copies, installed ribbon and card type in the Windows printer properties.
+Print front and back separately and reload the card. A browser cannot confirm physical printing
+or read the Windows queue; check the Windows queue and the card itself. Allow pop-ups for this
+site if the print window is blocked. The print window has a button to reopen the print dialog.
+
+Choose **مک میزبان سایت — صف macOS** to use the printer attached to the **Mac**.
+Opening the maintenance utility opens it on the Mac. The Windows browser
+cannot directly access a Windows USB encoder through this server. Designs are saved separately
+in each browser; use `.card.json` export/import to move a design between them.
 
 ## Design and print
 
@@ -107,6 +142,11 @@ HiCo/LoCo per card. Open **تنظیم نوار مغناطیسی** from the navig
 - Load the seven original examples with **۷ نمونهٔ HiTi**. They come from the supplied
   `CardDesireeCS_v1.0.47.24/CS-200e_Driver_v2.5.9.27_FW_v1.31.0.p/CS-200e_Driver_v2.5.9.27/CS2xx/Common/Magnetic.txt`.
 - Edit each card separately, add or remove records, and leave unused tracks empty.
+- Generate random membership numbers for Track 2: choose 1–1,000 new records and 6–37
+  digits (defaults: 10 records, 10 digits). New records are appended, existing populated
+  records are preserved, and duplicates within the current list are excluded. Each new
+  record inherits the selected record's HiCo/LoCo. Export to retain the list; these IDs
+  are not automatically inserted into the printed back artwork or written to a stripe.
   Persian/Arabic digits typed into fields become ASCII digits. Enter payloads without
   start/end sentinels or LRC. All records must be valid before export.
 - Import the original `Magnetic.txt` or a saved Card Studio JSON file (up to 1 MiB and
@@ -153,6 +193,14 @@ bun run typecheck
 
 Unit tests cover printer/option parsing, monochrome ribbon constraints, copy limits, layout
 imports, portrait/landscape PDF sizes and byte offsets, and magnetic payload validation.
-Server guards allow only local Host/Origin headers and require a per-process token for printing,
+Server guards allow only explicitly recognized local/LAN Host and Origin headers and require a per-process token for printing,
 canceling a session's print jobs, or opening the utility. Print PDFs use private temporary files
 and are removed after CUPS accepts them. Submitted cards may remain in macOS's own print spool.
+
+### Windows magnetic connector (requires hardware verification)
+
+In the print dialog select **ویندوز — چاپ پشت کارت + نوشتن مغناطیسی** and download `CardStudio-Connector.ps1` on Windows. Keep this file private: it contains the LAN login and an ephemeral bridge key. Run the PowerShell command shown in the site, select HiTi CS-200e and configure CR80, single-sided printing and the installed ribbon in Properties. Enable **Encoding by text data**, set prefix filter `~`, suffix filter `|`, and remove any fixed manual magnetic data (for example `12345678`). The native GDI text command is `~2<entered-number>|`; the `2` selects Track 2. This requires a driver supporting text extraction and the optional magnetic encoder. A raster browser print alone cannot encode.
+
+The connector polls the authenticated site, receives one back image and the exact entered numeric card field (Persian/Arabic digits normalized, spaces removed, leading zeroes preserved), asks the Windows operator to confirm, and submits one copy through PrintDocument/native TextOut. No runtime or SDK download is needed on Windows PowerShell 5.1. The server never automatically retries a claimed card; if the connector crashes, check the Windows queue and resolve the physical card before restarting the site. Download a new connector after server restart or host address change. Choose the proper HiCo/LoCo setting in the driver. Driver submission is not proof of successful encoding: verify the card with a magnetic reader. Native Windows execution and physical encoding have not been tested on the development Mac.
+
+Reference for text extraction syntax: [HiTi driver manual, Magnetic encoding setting](https://update.hiti.com/Files/Manual/CS-222e_EN_UserManual.pdf). Actual availability depends on the installed CS-200e driver version.

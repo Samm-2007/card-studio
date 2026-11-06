@@ -1,8 +1,9 @@
-import { mkdtemp, readFile, rm, writeFile, access } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile, access, mkdir, chmod } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { watch } from "node:fs";
 import { CARD, jpegDimensions, makePdf } from "./src/pdf";
+import { allowedRequest, isLoopback, isPrivateIPv4, lanAddresses, validLogin } from "./src/network";
 import {
   DRIVER_KEYS,
   parseOptions,
@@ -11,9 +12,27 @@ import {
   queueMessages,
 } from "./src/printer";
 
+import { WindowsBridge } from "./src/windowsBridge";
+const bridge = new WindowsBridge();
 const root = dirname(import.meta.path);
 const port = Number(process.env.CARD_STUDIO_PORT || 3217);
 const token = crypto.randomUUID();
+const lanEnabled = process.argv.includes("--lan") || process.env.CARD_STUDIO_LAN === "1";
+const passwordPath = join(root, ".scratch", "lan-password.txt");
+let lanPassword = "";
+if (lanEnabled) {
+  await mkdir(dirname(passwordPath), { recursive: true, mode: 0o700 });
+  try {
+    lanPassword = (await readFile(passwordPath, "utf8")).trim();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  if (!lanPassword) {
+    lanPassword = crypto.randomUUID().replaceAll("-", "").slice(0, 16);
+    await writeFile(passwordPath, `${lanPassword}\n`, { mode: 0o600 });
+  }
+  await chmod(passwordPath, 0o600);
+}
 const buildDir = await mkdtemp(join(tmpdir(), "card-studio-web-"));
 async function buildClient() {
   const built = await Bun.build({
@@ -107,17 +126,24 @@ const json = (value: unknown, status = 200) =>
   });
 
 const server = Bun.serve({
-  hostname: "127.0.0.1",
+  hostname: lanEnabled ? "0.0.0.0" : "127.0.0.1",
   port,
   maxRequestBodySize: 12 * 1024 * 1024,
-  async fetch(req) {
+  async fetch(req, server) {
     const url = new URL(req.url);
-    const allowedHosts = [`127.0.0.1:${port}`, `localhost:${port}`];
-    if (!allowedHosts.includes(req.headers.get("host") ?? ""))
-      return json({ error: "Open Card Studio on localhost." }, 403);
-    const origin = req.headers.get("origin");
-    if (origin && !allowedHosts.some((host) => origin === `http://${host}`))
+    const allowedHosts = ["127.0.0.1", "localhost", ...(lanEnabled ? lanAddresses() : [])].map((host) => `${host}:${port}`);
+    if (!allowedRequest(req, allowedHosts))
       return json({ error: "This request is not from Card Studio." }, 403);
+    const peer = server.requestIP(req)?.address ?? "";
+    if (lanEnabled && !isLoopback(peer)) {
+      if (!isPrivateIPv4(peer.replace(/^::ffff:/, "")))
+        return json({ error: "Only local network connections are allowed." }, 403);
+      if (!validLogin(req.headers.get("authorization"), lanPassword))
+        return new Response("Sign in to Card Studio.", {
+          status: 401,
+          headers: { "WWW-Authenticate": 'Basic realm="Card Studio", charset="UTF-8"', "Cache-Control": "no-store" },
+        });
+    }
     try {
       if (req.method === "GET") {
         if (url.pathname === "/")
@@ -150,6 +176,12 @@ const server = Bun.serve({
               },
             },
           );
+        if (url.pathname === "/api/windows/status") return json(bridge.status());
+        if (url.pathname === "/api/windows/download") {
+          const script = (await readFile(join(root, "windows/connector.ps1"), "utf8")).replace("__CONFIG__", JSON.stringify({url: url.origin, key: bridge.key, password: lanPassword}).replaceAll("'", "''"));
+
+          return new Response("\ufeff" + script, { headers: {"Content-Type":"application/octet-stream", "Content-Disposition":'attachment; filename="CardStudio-Connector.ps1"', "Cache-Control":"no-store"} });
+        }
         if (url.pathname === "/api/status") {
           const [driverInstalled, utilityInstalled] = await Promise.all([
             exists(driverPath),
@@ -208,11 +240,17 @@ const server = Bun.serve({
         }
       }
       if (req.method === "POST") {
+        if (url.pathname === "/api/windows/poll" || url.pathname === "/api/windows/result") {
+          if (req.headers.get("x-windows-bridge-key") !== bridge.key) return json({error:"Download a fresh connector from Card Studio."},403);
+          const body = await req.json();
+          return json(url.pathname.endsWith("/poll") ? bridge.poll(body) : bridge.result(body));
+        }
         if (req.headers.get("x-card-studio-token") !== token)
           return json(
             { error: "Reload Card Studio to reconnect to your Mac." },
             403,
           );
+        if (url.pathname === "/api/windows/print") return json(bridge.submit(await req.json()));
         if (url.pathname === "/api/utility") {
           if (!(await exists(utilityPath)))
             return json(
@@ -342,6 +380,10 @@ const server = Bun.serve({
   },
 });
 console.log(`Card Studio is ready at http://localhost:${server.port}`);
+if (lanEnabled) {
+  for (const address of lanAddresses()) console.log(`Windows / LAN: http://${address}:${server.port}/?layout=madar`);
+  console.log(`LAN username: cardstudio · Password file: ${passwordPath}`);
+}
 const cleanup = async () => {
   sourceWatcher.close();
   server.stop();

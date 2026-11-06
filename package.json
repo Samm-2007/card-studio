@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "bun --watch server.ts",
     "start": "bun server.ts",
+    "start:lan": "bun server.ts --lan",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },

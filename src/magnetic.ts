@@ -44,6 +44,34 @@ export const EMPTY_TRACKS: Tracks = {
   track1: "", track2: "", track3: "", coercivity: "HiCo",
 };
 
+export function generateMagneticRecords(
+  count: number, digits: number, coercivity: Tracks["coercivity"], existing: Tracks[] = [],
+): Tracks[] {
+  if (!Number.isInteger(count) || count < 1 || count + existing.length > MAX_MAGNETIC_RECORDS)
+    throw new Error("تعداد کارت‌ها باید بین ۱ تا ۱۰۰۰ و در محدودهٔ ظرفیت باقی‌مانده باشد.");
+  if (!Number.isInteger(digits) || digits < 6 || digits > 37)
+    throw new Error("طول شماره باید بین ۶ تا ۳۷ رقم باشد.");
+  if (coercivity !== "HiCo" && coercivity !== "LoCo") throw new Error("نوع نوار معتبر نیست.");
+  const used = new Set(existing.map((record) => record.track2));
+  const records: Tracks[] = [];
+  // Rejection sampling avoids modulo bias; keep IDs as strings even above 53 bits.
+  for (let attempt = 0; records.length < count && attempt < 100_000; attempt++) {
+    let number = "";
+    while (number.length < digits) {
+      for (const byte of crypto.getRandomValues(new Uint8Array(64))) {
+        if (byte >= 250 || (!number && byte % 10 === 0)) continue;
+        number += String(byte % 10);
+        if (number.length === digits) break;
+      }
+    }
+    if (used.has(number)) continue;
+    used.add(number);
+    records.push({ ...EMPTY_TRACKS, track2: number, coercivity });
+  }
+  if (records.length !== count) throw new Error("ساخت شماره‌های بدون تکرار ممکن نشد؛ دوباره امتحان کنید.");
+  return records;
+}
+
 // Transcribed verbatim from the supplied CS2xx/Common/Magnetic.txt (MagTest).
 export const HITI_MAGNETIC_SAMPLES = `1 ABCDEFRG
 2 12345678

@@ -3,10 +3,30 @@ import { readFile } from "node:fs/promises";
 import {
   activeTrackMask, EMPTY_TRACKS, exportHiTiMagnetic, exportMagneticProject,
   HITI_MAGNETIC_SAMPLES, importMagneticFile, MAX_MAGNETIC_FILE_BYTES,
-  normalizeTrackInput, parseHiTiMagnetic,
+  normalizeTrackInput, parseHiTiMagnetic, generateMagneticRecords, validateTracks,
 } from "../src/magnetic";
 
 const source = new URL("./fixtures/hiti-magnetic.txt", import.meta.url);
+
+describe("random membership numbers", () => {
+  test("creates unique numeric Track 2 records and round-trips through vendor TXT", () => {
+    const existing = generateMagneticRecords(500, 6, "LoCo");
+    const next = generateMagneticRecords(500, 6, "LoCo", existing);
+    const all = [...existing, ...next];
+    expect(new Set(all.map((record) => record.track2)).size).toBe(1000);
+    expect(all.every((record) => /^[1-9][0-9]{5}$/.test(record.track2) && !record.track1 && !record.track3 && !validateTracks(record).length)).toBe(true);
+    expect(parseHiTiMagnetic(exportHiTiMagnetic(all), "LoCo")).toEqual(all);
+  });
+  test("preserves long IDs as strings and enforces count, length and capacity", () => {
+    const records = generateMagneticRecords(2, 37, "HiCo");
+    expect(records.every((record) => /^[1-9][0-9]{36}$/.test(record.track2))).toBe(true);
+    expect(importMagneticFile(exportMagneticProject(records), "LoCo")).toEqual(records);
+    for (const [count, digits] of [[0, 10], [1001, 10], [1.5, 10], [1, 5], [1, 38], [1, NaN]]) {
+      expect(() => generateMagneticRecords(count!, digits!, "HiCo")).toThrow();
+    }
+    expect(() => generateMagneticRecords(999, 10, "HiCo", records)).toThrow();
+  });
+});
 
 describe("HiTi sample compatibility", () => {
   test("reproduces all seven combinations from the supplied vendor file", async () => {

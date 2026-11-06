@@ -1,3 +1,4 @@
+import { elementId } from "./id";
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -53,8 +54,10 @@ import { MagneticPanel } from "./MagneticPanel";
 import { MadarFields } from "./MadarFields";
 import { UniversityFields } from "./UniversityFields";
 import { updateUniversityPhoto, UNIVERSITY_PHOTO_ID } from "./university";
+import { cardTrack2 } from "./cardNumber";
 import { designForAutosave } from "./madar";
 import { referencePreview } from "./reference";
+import { printOnThisComputer } from "./browserPrint";
 import {
   DRIVER_KEYS,
   RIBBON_LABELS,
@@ -199,6 +202,10 @@ function App() {
   const [duplex, setDuplex] = useState(false);
   const [modal, setModal] = useState<"print" | "setup" | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showWindowsHelper, setShowWindowsHelper] = useState(true);
+  const [printTarget, setPrintTarget] = useState<"browser" | "mac" | "connector">(
+    () => /Windows/i.test(navigator.userAgent) ? "browser" : "mac",
+  );
   const [toast, setToast] = useState<{
     message: string;
     error: boolean;
@@ -609,6 +616,29 @@ function App() {
       setModal(null);
       setView("queue");
       notify("Sent to the macOS print queue.");
+    } catch (err) {
+      notify((err as Error).message, true);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function submitWindowsMagnetic() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const track2 = cardTrack2(design);
+      const canvas = await renderCard(design, "back");
+      const result = await api("/api/windows/print", {id: elementId(), track2, image: canvas.toDataURL("image/jpeg", 0.98)});
+      notify(result.message);
+    } catch (err) { notify((err as Error).message, true); }
+    finally { setBusy(false); }
+  }
+  async function submitBrowserPrint() {
+    if (busy || printSide === "both") return;
+    setBusy(true);
+    try {
+      await printOnThisComputer(design, printSide);
+      notify("پنجرهٔ چاپ همین کامپیوتر آماده شد؛ چاپگر و نتیجه را در ویندوز بررسی کن.");
     } catch (err) {
       notify((err as Error).message, true);
     } finally {
@@ -1430,7 +1460,7 @@ function App() {
                 <h1>
                   Print queue<span>.</span>
                 </h1>
-                <p>Jobs sent from this Card Studio session.</p>
+                <p>Jobs sent to the Mac. Windows/browser jobs appear in that computer’s print queue.</p>
               </div>
               <button className="button secondary" onClick={refreshJobs}>
                 <RefreshCw size={15} />
@@ -1500,7 +1530,7 @@ function App() {
             </p>
           </main>
         ) : view === "magnetic" ? (
-          <MagneticPanel onBack={() => setView("design")} />
+          <MagneticPanel number={cardTrack2(design)} onBack={() => { setView("design"); setTab("content"); }} onPrint={() => { setPrintTarget("connector"); setPrintSide("back"); setModal("print"); }} />
         ) : (
           <main className="secondary-page">
             <div className="page-heading">
@@ -1736,7 +1766,9 @@ function App() {
                 <p>
                   {design.template === "madar"
                     ? "Only the new text and artwork prints, in the selected output colors. The existing stripe and logo are not printed again. Load the back of the card for this pass."
-                    : "Your card will print at actual size through the macOS HiTi driver."}
+                    : printTarget === "browser"
+                      ? "چاپ از طریق مرورگر همین کامپیوتر و درایور نصب‌شدهٔ آن انجام می‌شود."
+                      : "Your card will print at actual size through the macOS HiTi driver."}
                 </p>
                 <div className="print-preview">
                   <img
@@ -1756,7 +1788,55 @@ function App() {
                     </span>
                   </div>
                 </div>
-                {printer ? (
+                <label className="field" dir="rtl">
+                  <span>چاپگر به کدام کامپیوتر متصل است؟</span>
+                  <select value={printTarget} disabled={busy} onChange={(e) => {
+                    const target = e.target.value as typeof printTarget;
+                    setPrintTarget(target);
+                    if (target === "browser" && printSide === "both") setPrintSide(side);
+                  }}>
+                    <option value="browser">همین کامپیوتر — چاپگر USB ویندوز / مرورگر</option>
+                    <option value="connector">ویندوز — چاپ پشت کارت + نوشتن مغناطیسی</option>
+                    <option value="mac">مک میزبان سایت — صف macOS</option>
+                  </select>
+                </label>
+                {printTarget === "connector" ? (
+                  <div dir="rtl">
+                    <p>شمارهٔ واردشدهٔ کارت به Track 2 ارسال می‌شود؛ مقدار ثابت قبلی مثل 12345678 را از درایور پاک کن و Encoding by text data را فعال کن.  چاپ پشت کارت، یک نسخه. دستگاه باید ماژول مغناطیسی داشته باشد و استخراج متن در درایور تنظیم شده باشد.</p>
+                    <a className="button secondary full" href="/api/windows/download" download>دانلود رابط ویندوز</a>
+                    <p>فایل را روی ویندوز در Downloads ذخیره کن. PowerShell را باز کن و دستور زیر را اجرا کن؛ چاپگر و تنظیمات درایور را انتخاب کن و پنجره را باز نگه دار. فایل رابط شامل کلید اتصال است؛ آن را به دیگران نده. پس از راه‌اندازی مجدد سرور، دوباره دانلود کن.</p>
+                    <pre dir="ltr" style={{whiteSpace:"pre-wrap",userSelect:"text"}}>powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "$env:USERPROFILE\Downloads\CardStudio-Connector.ps1"</pre>
+                    <p dir="ltr">Prefix filter: ~ · Suffix filter: | · Track: 2</p>
+                    <button className="button secondary full" onClick={async () => {try {const state = await api("/api/windows/status"); notify((state.connected ? "متصل: " + state.machine + " · " + state.printer : "رابط ویندوز متصل نیست") + (state.job ? " — " + state.job.message : ""));} catch(err){notify((err as Error).message,true);}}}>بررسی اتصال و آخرین نتیجه</button>
+                    <button className="button primary full" disabled={busy} onClick={submitWindowsMagnetic}>{busy ? "در حال ارسال…" : "چاپ پشت کارت و ارسال شماره به نوار مغناطیسی"}</button>
+                    <p>در ویندوز شماره را پیش از چاپ تأیید کن. ارسال به درایور به معنی موفقیت رمزگذاری نیست؛ نتیجه را با کارت‌خوان مغناطیسی بازخوانی کن.</p>
+                  </div>
+                ) : printTarget === "browser" ? (
+                  <>
+                    <div className="inline-note" dir="rtl">
+                      در پنجرهٔ چاپ، HiTi نصب‌شده روی ویندوز را انتخاب کن. اندازهٔ کاغذ CR80،
+                      مقیاس ۱۰۰٪، حاشیه صفر و سربرگ/پابرگ خاموش باشد.
+                      تعداد نسخه‌ها و نوع ریبون را همان‌جا در تنظیمات درایور تعیین کن.
+                      برای چاپ پشت و رو، هر سمت را جداگانه چاپ و کارت را دوباره بارگذاری کن.
+                    </div>
+                    <label className="field" dir="rtl">
+                      <span>سمت کارت</span>
+                      <select value={printSide === "both" ? side : printSide} disabled={busy}
+                        onChange={(e) => setPrintSide(e.target.value as Side)}>
+                        <option value="front">روی کارت</option>
+                        <option value="back">پشت کارت</option>
+                      </select>
+                    </label>
+                    <button className="button primary full" disabled={busy} onClick={submitBrowserPrint}>
+                      {busy ? <LoaderCircle className="spin" size={16} /> : <Printer size={16} />}
+                      {busy ? "آماده‌سازی چاپ…" : "چاپ روی همین کامپیوتر (ویندوز)"}
+                    </button>
+                    <p className="ribbon-hint" dir="rtl">
+                      این مسیر درخواست را به صف مک نمی‌فرستد. وضعیت چاپ را در صف ویندوز ببین.
+                      این گزینه چاپ متن و تصویر است؛ نوار مغناطیسی را رمزگذاری نمی‌کند.
+                    </p>
+                  </>
+                ) : printer ? (
                   <>
                     <label className="field">
                       <span>Printer</span>
@@ -1963,6 +2043,25 @@ function App() {
           </section>
         </div>
       )}
+      {showWindowsHelper && <aside className="windows-command-helper" dir="rtl" aria-label="دستور موقت پاورشل">
+        <div className="windows-command-helper-heading">
+          <strong>راه‌اندازی رابط ویندوز · موقت</strong>
+          <button type="button" aria-label="بستن راه‌اندازی رابط ویندوز" onClick={() => setShowWindowsHelper(false)}><X size={16} /></button>
+        </div>
+        <a href="/api/windows/download" download>۱. دانلود رابط ویندوز</a>
+        <label htmlFor="windows-connector-command">۲. این دستور را در PowerShell اجرا کن:</label>
+        <textarea id="windows-connector-command" dir="ltr" readOnly rows={3}
+          value={'powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "$env:USERPROFILE\\Downloads\\CardStudio-Connector.ps1"'}
+          onFocus={(event) => event.currentTarget.select()} />
+        <button className="button secondary full" onClick={async () => {
+          const field = document.getElementById("windows-connector-command") as HTMLTextAreaElement;
+          try {
+            if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(field.value);
+            else { field.focus(); field.select(); if (!document.execCommand("copy")) throw new Error("manual"); }
+            notify("دستور پاورشل کپی شد؛ در ویندوز Paste کن.");
+          } catch { field.focus(); field.select(); notify("دستور انتخاب شد؛ برای کپی Ctrl+C بزن."); }
+        }}>کپی دستور PowerShell</button>
+      </aside>}
       {toast && (
         <div
           className={`toast ${toast.error ? "error" : ""}`}
