@@ -16,8 +16,7 @@ export function latinDigits(text: string): string {
 export function stackedNumber(text: string): string {
   return (
     latinDigits(text)
-      .replace(/\D/g, "")
-      .slice(0, 16)
+      .replace(/\s/g, "")
       .replace(/[0-9]/g, (c) => "۰۱۲۳۴۵۶۷۸۹"[Number(c)]!)
       .match(/.{1,4}/g)
       ?.join("\n") ?? ""

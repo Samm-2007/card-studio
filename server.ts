@@ -13,7 +13,6 @@ import {
 } from "./src/printer";
 
 import { WindowsBridge } from "./src/windowsBridge";
-const bridge = new WindowsBridge();
 const root = dirname(import.meta.path);
 const port = Number(process.env.CARD_STUDIO_PORT || 3217);
 const token = crypto.randomUUID();
@@ -33,6 +32,15 @@ if (lanEnabled) {
   }
   await chmod(passwordPath, 0o600);
 }
+// Persist the pairing credential independently of the volatile print queue.
+const bridgeKeyPath = join(root, ".scratch", "windows-bridge-key.txt");
+await mkdir(dirname(bridgeKeyPath), { recursive: true, mode: 0o700 });
+try { await writeFile(bridgeKeyPath, crypto.randomUUID(), { mode: 0o600, flag: "wx" }); }
+catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+await chmod(bridgeKeyPath, 0o600);
+const bridgeKey = (await readFile(bridgeKeyPath, "utf8")).trim();
+if (!/^[0-9a-f-]{36}$/.test(bridgeKey)) throw new Error("Invalid saved Windows connector key.");
+const bridge = new WindowsBridge(bridgeKey);
 const buildDir = await mkdtemp(join(tmpdir(), "card-studio-web-"));
 async function buildClient() {
   const built = await Bun.build({

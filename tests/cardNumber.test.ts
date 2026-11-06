@@ -12,3 +12,10 @@ test('Track 2 follows the current Card / member number without a separate record
  design.elements=updateMadarField(design,'number','');
  expect(cardTrack2(design)).toBe('');
 });
+
+test('long card values and separators survive the Madar artwork round trip',()=>{
+ const design=madarDesign(DEFAULT_DESIGN);
+ const number='00123456789012345678901234567890=12345678901234567890123456789012345';
+ design.elements=updateMadarField(design,'number',number);
+ expect(cardTrack2(design)).toBe(number);
+});

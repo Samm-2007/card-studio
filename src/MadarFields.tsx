@@ -39,15 +39,15 @@ export function MadarFields({
         <span>Card / member number</span>
         <input
           dir="ltr"
-          inputMode="numeric"
+          inputMode="text"
           autoComplete="off"
-          maxLength={19}
+          maxLength={66}
           value={madarFieldValue(design, "number")}
-          placeholder="شماره کارت (تا ۱۶ رقم)"
+          placeholder="تا ۶۶ نویسه: رقم و ="
           onChange={(e) => change("number", e.target.value)}
         />
         <small>
-          همین شماره به نوار مغناطیسی ارسال می‌شود.
+          تا ۳۷ نویسه: Track 2؛ از ۳۸ تا ۶۶: Track 3. کارت‌خوان باید ترک مربوط را پشتیبانی کند.
         </small>
       </label>
       <details>

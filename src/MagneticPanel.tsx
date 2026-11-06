@@ -10,9 +10,10 @@ export function MagneticPanel({ number, onBack, onPrint }: {
       <button className="button secondary" onClick={onBack}><ArrowLeft size={16}/>ویرایش مشخصات کارت</button>
     </div>
     <section className="magnetic-fields">
-      <label className="field"><span>شماره کارت — متصل به Track 2</span>
+      <label className="field"><span>شماره کارت — متصل به نوار مغناطیسی</span>
         <input dir="ltr" readOnly value={number} placeholder="شماره را در مشخصات کارت وارد کن" />
       </label>
+      <p>تا ۳۷ نویسه روی Track 2؛ مقدار بلندتر تا ۶۶ نویسه روی Track 3 نوشته می‌شود. فقط رقم و = مجاز است؛ کارت‌خوان باید ترک انتخاب‌شده را بخواند.</p>
       <button className="button primary" disabled={!number} onClick={onPrint}><Printer size={16}/>چاپ و ارسال شماره به نوار</button>
     </section>
   </main>;

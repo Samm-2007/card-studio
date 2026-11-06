@@ -1,5 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $config = '__CONFIG__' | ConvertFrom-Json
+Write-Host 'Card Studio Connector v3 - validated multi-track input'
+Write-Host 'Server:' $config.url
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'
@@ -10,7 +12,7 @@ using System.Runtime.InteropServices;
 public static class CardStudioPrint {
  [DllImport("gdi32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
  static extern bool TextOut(IntPtr dc, int x, int y, string text, int length);
- public static void Send(PrintDocument doc, byte[] bytes, string number) {
+ public static void Send(PrintDocument doc, byte[] bytes, string[] commands) {
   using(var stream = new System.IO.MemoryStream(bytes))
   using(var image = Image.FromStream(stream)) {
    doc.DocumentName = "Card Studio - one card";
@@ -25,9 +27,9 @@ public static class CardStudioPrint {
     var bounds = e.PageBounds;
     e.Graphics.TranslateTransform(-e.PageSettings.HardMarginX, -e.PageSettings.HardMarginY);
     e.Graphics.DrawImage(image, 0, 0, bounds.Width, bounds.Height);
-    string command = "~2" + number + "|";
+
     IntPtr dc = e.Graphics.GetHdc();
-    try { if(!TextOut(dc, 10, 10, command, command.Length)) throw new Exception("GDI TextOut failed"); }
+    try { for (int i=0; i<commands.Length; i++) { string command=commands[i]; if(!TextOut(dc, 10, 10+i*40, command, command.Length)) throw new Exception("GDI TextOut failed"); } }
     finally { e.Graphics.ReleaseHdc(dc); }
     e.HasMorePages = false;
    };
@@ -57,11 +59,14 @@ while ($true) {
    $ok = $false
    $message = 'Operator canceled; not sent.'
    try {
-    if ($job.track2 -notmatch '^[0-9]{1,37}$') { throw 'Invalid Track 2 number.' }
-    $choice = [Windows.Forms.MessageBox]::Show(('Print ONE card and send Track 2: '+$job.track2+"?`nEncoder and driver text extraction MUST be configured. Verify with a magnetic reader after printing."),'Confirm card','YesNo','Warning')
+    if (-not $job.commands -or $job.commands.Count -gt 3) { throw 'Invalid magnetic commands. Download connector v3.' }
+    foreach ($command in $job.commands) {
+     if ($command -notmatch '^~[123][\x20-\x5F]{1,104}\|$') { throw 'Invalid native command.' }
+    }
+    $choice = [Windows.Forms.MessageBox]::Show(('Print ONE card with these magnetic commands?'+"`n"+($job.commands -join "`n")+"`nVerify with a magnetic reader after printing."),'Confirm card','YesNo','Warning')
     if ($choice -eq 'Yes') {
      $bytes = [Convert]::FromBase64String(($job.image -split ',',2)[1])
-     [CardStudioPrint]::Send($doc, $bytes, $job.track2)
+     [CardStudioPrint]::Send($doc, $bytes, [string[]]$job.commands)
      $ok = $true; $message = 'Submitted to Windows driver; verify magnetic readback.'
     }
    } catch { $message = 'Print outcome may be unknown. Check Windows queue before retrying. '+$_.Exception.Message }
@@ -70,6 +75,20 @@ while ($true) {
    catch { Write-Warning 'Result not delivered. Do not resubmit; check printer and website. Restart server only after resolving this card.' }
    $job=$null; $bytes=$null
   }
- } catch { Write-Warning $_.Exception.Message }
+ } catch {
+  $detail = $_.Exception.Message
+  if ($_.ErrorDetails.Message) { $detail += ' ' + $_.ErrorDetails.Message }
+  try {
+   if ($_.Exception.Response) {
+    $reader = New-Object IO.StreamReader($_.Exception.Response.GetResponseStream())
+    $detail += ' ' + $reader.ReadToEnd(); $reader.Dispose()
+   }
+  } catch {}
+  Write-Warning $detail
+  if ($detail -match '401|403') {
+   Write-Host 'Connection refused. Download a NEW connector from the current site. Run the newest downloaded file, including (1)/(2) if present.' -ForegroundColor Yellow
+   Read-Host 'Press Enter to close'; exit 1
+  }
+ }
  Start-Sleep -Seconds 2
 }

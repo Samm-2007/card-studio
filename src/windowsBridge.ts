@@ -1,3 +1,4 @@
+import { encodingCommands } from "./magneticEncoding";
 import { CARD, jpegDimensions } from "./pdf";
 import { normalizeTrackInput } from "./magnetic";
 
@@ -5,7 +6,7 @@ export const MAGNETIC_PREFIX = "~2";
 export const MAGNETIC_SUFFIX = "|";
 export function magneticNumber(value: string): string {
   const number = normalizeTrackInput(value).replace(/\s/g, "");
-  if (!/^[0-9]{1,37}$/.test(number)) throw new Error("شمارهٔ مغناطیسی باید ۱ تا ۳۷ رقم باشد؛ فقط رقم و فاصله مجاز است.");
+  if (!/^[0-9=]{1,66}$/.test(number)) throw new Error("دادهٔ مغناطیسی باید ۱ تا ۶۶ نویسه باشد؛ فقط رقم و جداکنندهٔ = مجاز است.");
   return number;
 }
 
@@ -18,7 +19,7 @@ type Job = {
 
 // Volatile, one-card queue. Claim exactly once; never retry an ambiguous native print.
 export class WindowsBridge {
-  readonly key = crypto.randomUUID();
+  constructor(readonly key: string = crypto.randomUUID()) {}
   private agent: Agent | null = null;
   private jobs: Job[] = [];
   private expire(now: number) {
@@ -54,7 +55,7 @@ export class WindowsBridge {
     if (!job) return { job: null };
     job.status = "claimed";
     job.message = "دریافت در ویندوز؛ منتظر تأیید اپراتور / درایور. دوباره ارسال نکنید.";
-    const payload = { id: job.id, image: job.image!, track2: job.track2! };
+    const payload = { id: job.id, image: job.image!, track2: job.track2!, commands: encodingCommands(job.track2!) };
     delete job.image; delete job.track2;
     return { job: payload };
   }
@@ -63,7 +64,8 @@ export class WindowsBridge {
     const input = value as Record<string, unknown>;
     if (typeof input.id !== "string" || !/^[\w-]{1,80}$/.test(input.id) ||
       typeof input.track2 !== "string" || typeof input.image !== "string") throw new Error("Invalid Windows print job.");
-    const track2 = magneticNumber(input.track2);
+    const track2 = /^[%;+]/.test(input.track2.trim()) ? input.track2 : magneticNumber(input.track2);
+    encodingCommands(track2);
     const fingerprint = new Bun.CryptoHasher("sha256").update(this.key + track2 + input.image).digest("hex");
     const previous = this.jobs.find((job) => job.id === input.id);
     if (previous) {

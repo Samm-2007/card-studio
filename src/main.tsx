@@ -67,6 +67,8 @@ import {
 } from "./printer";
 import "./styles.css";
 
+const WINDOWS_CONNECTOR_COMMAND = `powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File (Get-ChildItem -LiteralPath "$env:USERPROFILE/Downloads" -Filter "CardStudio-Connector*.ps1" | Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName)`;
+
 type Device = PrinterInfo & { options: DriverOption[] };
 type Status = {
   token: string;
@@ -202,6 +204,7 @@ function App() {
   const [duplex, setDuplex] = useState(false);
   const [modal, setModal] = useState<"print" | "setup" | null>(null);
   const [busy, setBusy] = useState(false);
+  const [rawMagnetic, setRawMagnetic] = useState("");
   const [showWindowsHelper, setShowWindowsHelper] = useState(true);
   const [printTarget, setPrintTarget] = useState<"browser" | "mac" | "connector">(
     () => /Windows/i.test(navigator.userAgent) ? "browser" : "mac",
@@ -626,7 +629,7 @@ function App() {
     if (busy) return;
     setBusy(true);
     try {
-      const track2 = cardTrack2(design);
+      const track2 = rawMagnetic.trim() ? rawMagnetic : cardTrack2(design);
       const canvas = await renderCard(design, "back");
       const result = await api("/api/windows/print", {id: elementId(), track2, image: canvas.toDataURL("image/jpeg", 0.98)});
       notify(result.message);
@@ -1802,11 +1805,15 @@ function App() {
                 </label>
                 {printTarget === "connector" ? (
                   <div dir="rtl">
-                    <p>شمارهٔ واردشدهٔ کارت به Track 2 ارسال می‌شود؛ مقدار ثابت قبلی مثل 12345678 را از درایور پاک کن و Encoding by text data را فعال کن.  چاپ پشت کارت، یک نسخه. دستگاه باید ماژول مغناطیسی داشته باشد و استخراج متن در درایور تنظیم شده باشد.</p>
+                    <label className="field"><span>ورودی کامل کارت‌خوان (اختیاری)</span>
+                      <textarea dir="ltr" rows={4} maxLength={260} autoComplete="off" spellCheck={false} value={rawMagnetic} onChange={e => setRawMagnetic(e.target.value)} placeholder="%...?...;...?...+...?" />
+                      <small>اگر خالی باشد، Card / member number ارسال می‌شود. فاصله‌ها در ترک ۱ حفظ می‌شوند؛ ترک ۲ و ۳ فقط رقم و = می‌پذیرند. دادهٔ کامل را با %، ;، + و پایان ? جدا کنید.</small>
+                    </label>
+                    <p>شمارهٔ واردشده تا ۳۷ نویسه به Track 2 و از ۳۸ تا ۶۶ نویسه به Track 3 ارسال می‌شود؛ مقدار ثابت قبلی مثل 12345678 را از درایور پاک کن و Encoding by text data را فعال کن.  چاپ پشت کارت، یک نسخه. دستگاه باید ماژول مغناطیسی داشته باشد و استخراج متن در درایور تنظیم شده باشد.</p>
                     <a className="button secondary full" href="/api/windows/download" download>دانلود رابط ویندوز</a>
-                    <p>فایل را روی ویندوز در Downloads ذخیره کن. PowerShell را باز کن و دستور زیر را اجرا کن؛ چاپگر و تنظیمات درایور را انتخاب کن و پنجره را باز نگه دار. فایل رابط شامل کلید اتصال است؛ آن را به دیگران نده. پس از راه‌اندازی مجدد سرور، دوباره دانلود کن.</p>
-                    <pre dir="ltr" style={{whiteSpace:"pre-wrap",userSelect:"text"}}>powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "$env:USERPROFILE\Downloads\CardStudio-Connector.ps1"</pre>
-                    <p dir="ltr">Prefix filter: ~ · Suffix filter: | · Track: 2</p>
+                    <p>فایل را روی ویندوز در Downloads ذخیره کن. PowerShell را باز کن و دستور زیر را اجرا کن؛ چاپگر و تنظیمات درایور را انتخاب کن و پنجره را باز نگه دار. فایل رابط شامل کلید اتصال است؛ آن را به دیگران نده. دستور زیر جدیدترین فایل دانلودشده را اجرا می‌کند.</p>
+                    <pre dir="ltr" style={{whiteSpace:"pre-wrap",userSelect:"text"}}>{WINDOWS_CONNECTOR_COMMAND}</pre>
+                    <p dir="ltr">Prefix filter: ~ · Suffix filter: | · Track: 2 / 3</p>
                     <button className="button secondary full" onClick={async () => {try {const state = await api("/api/windows/status"); notify((state.connected ? "متصل: " + state.machine + " · " + state.printer : "رابط ویندوز متصل نیست") + (state.job ? " — " + state.job.message : ""));} catch(err){notify((err as Error).message,true);}}}>بررسی اتصال و آخرین نتیجه</button>
                     <button className="button primary full" disabled={busy} onClick={submitWindowsMagnetic}>{busy ? "در حال ارسال…" : "چاپ پشت کارت و ارسال شماره به نوار مغناطیسی"}</button>
                     <p>در ویندوز شماره را پیش از چاپ تأیید کن. ارسال به درایور به معنی موفقیت رمزگذاری نیست؛ نتیجه را با کارت‌خوان مغناطیسی بازخوانی کن.</p>
@@ -2051,7 +2058,7 @@ function App() {
         <a href="/api/windows/download" download>۱. دانلود رابط ویندوز</a>
         <label htmlFor="windows-connector-command">۲. این دستور را در PowerShell اجرا کن:</label>
         <textarea id="windows-connector-command" dir="ltr" readOnly rows={3}
-          value={'powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "$env:USERPROFILE\\Downloads\\CardStudio-Connector.ps1"'}
+          value={WINDOWS_CONNECTOR_COMMAND}
           onFocus={(event) => event.currentTarget.select()} />
         <button className="button secondary full" onClick={async () => {
           const field = document.getElementById("windows-connector-command") as HTMLTextAreaElement;
