@@ -4,6 +4,12 @@ Write-Host 'Card Studio Connector v3 - validated multi-track input'
 Write-Host 'Server:' $config.url
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+$created = $false
+$instanceLock = New-Object Threading.Mutex($true, 'Local\CardStudioConnector', [ref]$created)
+if (-not $created) { [Windows.Forms.MessageBox]::Show('Card Studio connector is already running. Close the previous connector first.', 'Card Studio') | Out-Null; exit }
+$settingsDir = Join-Path $env:LOCALAPPDATA 'CardStudio'
+$printerFile = Join-Path $settingsDir 'printer.txt'
+
 Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'
 using System;
 using System.Drawing;
@@ -42,12 +48,18 @@ public static class CardStudioPrint {
 $headers = @{'X-Windows-Bridge-Key'=$config.key; Authorization=('Basic '+[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('cardstudio:'+$config.password)))}
 $id = [Guid]::NewGuid().ToString()
 $doc = New-Object Drawing.Printing.PrintDocument
-$dialog = New-Object Windows.Forms.PrintDialog
-$dialog.Document = $doc
-$dialog.UseEXDialog = $true
-[Windows.Forms.MessageBox]::Show('Select your HiTi CS-200e. In Properties configure CR80, single side, correct ribbon and magnetic encoder. Encoding by text data: enabled. Prefix filter: ~  Suffix filter: | (Track 2 marker is 2). Clear fixed manual Track 2 data. . A magnetic encoder module is required. Test on one blank membership card first.','Card Studio') | Out-Null
-if ($dialog.ShowDialog() -ne 'OK') { exit }
-if ($doc.PrinterSettings.PrinterName -notmatch 'CS[ _-]?200e') { throw 'Select a HiTi CS-200e printer.' }
+$savedPrinter = if (Test-Path -LiteralPath $printerFile) { (Get-Content -LiteralPath $printerFile -Raw).Trim() } else { '' }
+if ($savedPrinter -match 'CS[ _-]?200e') { $doc.PrinterSettings.PrinterName = $savedPrinter }
+if (-not $savedPrinter -or -not $doc.PrinterSettings.IsValid) {
+ $dialog = New-Object Windows.Forms.PrintDialog
+ $dialog.Document = $doc
+ $dialog.UseEXDialog = $true
+ [Windows.Forms.MessageBox]::Show('Select HiTi CS-200e. Save CR80, single side, correct ribbon and magnetic settings in Windows Printing Preferences. Enable Prefix / Suffix Filter: prefix ~ and suffix |. These Windows defaults are reused automatically next time.', 'Card Studio') | Out-Null
+ if ($dialog.ShowDialog() -ne 'OK') { exit }
+ if ($doc.PrinterSettings.PrinterName -notmatch 'CS[ _-]?200e') { throw 'Select a HiTi CS-200e printer.' }
+ New-Item -ItemType Directory -Force -Path $settingsDir | Out-Null
+ Set-Content -LiteralPath $printerFile -Value $doc.PrinterSettings.PrinterName -Encoding UTF8
+}
 Write-Host 'Connected printer:' $doc.PrinterSettings.PrinterName
 Write-Host 'Keep this window open. Close it to disconnect. No automatic retries.'
 while ($true) {

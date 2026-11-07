@@ -185,8 +185,20 @@ const server = Bun.serve({
             },
           );
         if (url.pathname === "/api/windows/status") return json(bridge.status());
-        if (url.pathname === "/api/windows/download") {
+        if (url.pathname === "/api/windows/download" || url.pathname === "/api/windows/setup") {
           const script = (await readFile(join(root, "windows/connector.ps1"), "utf8")).replace("__CONFIG__", JSON.stringify({url: url.origin, key: bridge.key, password: lanPassword}).replaceAll("'", "''"));
+
+          if (url.pathname === "/api/windows/setup") {
+            const directory = await mkdtemp(join(tmpdir(), "card-studio-setup-"));
+            try {
+              await writeFile(join(directory, "CardStudio-Connector.ps1"), "\ufeff" + script);
+              for (const name of ["Install.cmd", "install.ps1", "Uninstall.cmd"])
+                await writeFile(join(directory, name), await readFile(join(root, "windows", name)));
+              const zip = Bun.spawn(["/usr/bin/zip", "-q", "setup.zip", "CardStudio-Connector.ps1", "Install.cmd", "install.ps1", "Uninstall.cmd"], {cwd: directory, stdout:"ignore", stderr:"pipe"});
+              if (await zip.exited !== 0) throw new Error("Could not create Windows setup package.");
+              return new Response(await readFile(join(directory,"setup.zip")), {headers:{"Content-Type":"application/zip","Content-Disposition":'attachment; filename="CardStudio-Windows-Setup.zip"',"Cache-Control":"no-store"}});
+            } finally { await rm(directory, {recursive:true, force:true}); }
+          }
 
           return new Response("\ufeff" + script, { headers: {"Content-Type":"application/octet-stream", "Content-Disposition":'attachment; filename="CardStudio-Connector.ps1"', "Cache-Control":"no-store"} });
         }

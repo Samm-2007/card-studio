@@ -2562,11 +2562,7 @@ h1 > span {
 .magnetic-generator { margin: 18px 0; padding: 16px; border: 1px solid #dce1dc; border-radius: 10px; }
 .magnetic-generator legend { padding: 0 6px; font-weight: 600; font-size: 13px; }
 
-/* Temporary Windows connector setup shortcut. */
-.windows-command-helper { position: fixed; bottom: 16px; left: 16px; z-index: 35; width: min(340px, calc(100vw - 32px)); padding: 14px; display: grid; gap: 9px; background: #fff; color: #222; border: 1px solid #d8d8d8; border-radius: 14px; box-shadow: 0 6px 28px #0002; font-size: 12px; }
-.windows-command-helper textarea { box-sizing: border-box; width: 100%; resize: none; padding: 8px; font: 11px/1.6 monospace; background: #f5f5f5; color: #222; border: 1px solid #ddd; border-radius: 7px; user-select: text; }
-@media print { .windows-command-helper { display: none; } }
-
-.windows-command-helper-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.windows-command-helper-heading button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
-.windows-command-helper-heading button:hover { background: #eee; }
+.windows-settings-card { max-width: 720px; padding: 28px; display: grid; gap: 16px; background: #fff; border: 1px solid #e1e8d7; border-radius: 16px; }
+.windows-settings-card p { margin: 0; line-height: 1.9; }
+.windows-settings-card textarea { box-sizing: border-box; width: 100%; min-height: 110px; resize: vertical; padding: 12px; font: 12px/1.8 monospace; background: #f5f6f3; border: 1px solid #ddd; border-radius: 8px; user-select: text; }
+.windows-settings-card details { line-height: 1.9; }

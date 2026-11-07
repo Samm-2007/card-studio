@@ -87,7 +87,7 @@ type Job = {
   active?: boolean;
   message?: string;
 };
-type View = "design" | "queue" | "printer" | "magnetic";
+type View = "design" | "queue" | "printer" | "magnetic" | "settings";
 const templates: {
   id: Template;
   name: string;
@@ -205,7 +205,6 @@ function App() {
   const [modal, setModal] = useState<"print" | "setup" | null>(null);
   const [busy, setBusy] = useState(false);
   const [rawMagnetic, setRawMagnetic] = useState("");
-  const [showWindowsHelper, setShowWindowsHelper] = useState(true);
   const [printTarget, setPrintTarget] = useState<"browser" | "mac" | "connector">(
     () => /Windows/i.test(navigator.userAgent) ? "browser" : "mac",
   );
@@ -746,6 +745,9 @@ function App() {
             <CreditCard size={18} />
             تنظیم نوار مغناطیسی
           </button>
+          <button className={view === "settings" ? "nav-item active" : "nav-item"} onClick={() => setView("settings")}>
+            <Settings2 size={18} />تنظیمات
+          </button>
         </nav>
         <div className="sidebar-divider" />
         <div className="template-label">
@@ -805,6 +807,8 @@ function App() {
                 ? "Card designer"
                 : view === "queue"
                   ? "Print queue"
+                  : view === "settings"
+                    ? "تنظیمات"
                   : view === "magnetic"
                     ? "Magnetic stripe"
                     : "Your printer"}
@@ -1532,6 +1536,35 @@ function App() {
               when the local server restarts.
             </p>
           </main>
+        ) : view === "settings" ? (
+          <main className="secondary-page" dir="rtl">
+            <div className="page-heading"><div><div className="eyebrow">CARD STUDIO</div><h1>تنظیمات</h1><p>راه‌اندازی و اتصال چاپگر ویندوز</p></div></div>
+            <section className="windows-settings-card">
+              <h2>اتصال ویندوز</h2>
+                    <button className="button secondary full" onClick={async () => {try {const state = await api("/api/windows/status"); notify((state.connected ? "متصل: " + state.machine + " · " + state.printer : "رابط ویندوز متصل نیست") + (state.job ? " — " + state.job.message : ""));} catch(err){notify((err as Error).message,true);}}}>بررسی اتصال و آخرین نتیجه</button>
+              <p>فایل نصب را استخراج کن، رابط قبلی را ببند و Install.cmd را اجرا کن. پس از انتخاب اولیهٔ چاپگر، رابط هنگام ورود به ویندوز خودکار اجرا می‌شود.</p>
+        <a href="/api/windows/setup" download>نصب خودکار ویندوز (یک‌بار)</a>
+        <small>ZIP را استخراج کن و Install.cmd را اجرا کن.</small>
+        <a href="/api/windows/download" download>دانلود رابط برای اجرای دستی</a>
+        <label htmlFor="windows-connector-command">۲. این دستور را در PowerShell اجرا کن:</label>
+        <textarea id="windows-connector-command" dir="ltr" readOnly rows={3}
+          value={WINDOWS_CONNECTOR_COMMAND}
+          onFocus={(event) => event.currentTarget.select()} />
+        <button className="button secondary full" onClick={async () => {
+          const field = document.getElementById("windows-connector-command") as HTMLTextAreaElement;
+          try {
+            if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(field.value);
+            else { field.focus(); field.select(); if (!document.execCommand("copy")) throw new Error("manual"); }
+            notify("دستور پاورشل کپی شد؛ در ویندوز Paste کن.");
+          } catch { field.focus(); field.select(); notify("دستور انتخاب شد؛ برای کپی Ctrl+C بزن."); }
+        }}>کپی دستور PowerShell</button>
+              <details><summary>تنظیم درایور چاپگر</summary>
+                <p>در Printing Preferences چاپگر HiTi، اندازهٔ CR80، چاپ یک‌رو و ریبون مناسب را ذخیره کن. در Magnetic Encoding گزینهٔ Prefix / Suffix Filter را فعال و داده‌های ثابت قبلی را پاک کن. نوع HiCo / LoCo باید با کارت مطابقت داشته باشد.</p>
+                <p dir="ltr">Prefix: ~ · Suffix: |</p>
+              </details>
+              <p>فایل رابط شامل کلید اتصال است؛ آن را در اختیار دیگران قرار نده. برای حذف اجرای خودکار، Uninstall.cmd را از پوشهٔ LocalAppData\CardStudio اجرا کن.</p>
+            </section>
+          </main>
         ) : view === "magnetic" ? (
           <MagneticPanel number={cardTrack2(design)} onBack={() => { setView("design"); setTab("content"); }} onPrint={() => { setPrintTarget("connector"); setPrintSide("back"); setModal("print"); }} />
         ) : (
@@ -1809,12 +1842,8 @@ function App() {
                       <textarea dir="ltr" rows={4} maxLength={260} autoComplete="off" spellCheck={false} value={rawMagnetic} onChange={e => setRawMagnetic(e.target.value)} placeholder="%...?...;...?...+...?" />
                       <small>اگر خالی باشد، Card / member number ارسال می‌شود. فاصله‌ها در ترک ۱ حفظ می‌شوند؛ ترک ۲ و ۳ فقط رقم و = می‌پذیرند. دادهٔ کامل را با %، ;، + و پایان ? جدا کنید.</small>
                     </label>
-                    <p>شمارهٔ واردشده تا ۳۷ نویسه به Track 2 و از ۳۸ تا ۶۶ نویسه به Track 3 ارسال می‌شود؛ مقدار ثابت قبلی مثل 12345678 را از درایور پاک کن و Encoding by text data را فعال کن.  چاپ پشت کارت، یک نسخه. دستگاه باید ماژول مغناطیسی داشته باشد و استخراج متن در درایور تنظیم شده باشد.</p>
-                    <a className="button secondary full" href="/api/windows/download" download>دانلود رابط ویندوز</a>
-                    <p>فایل را روی ویندوز در Downloads ذخیره کن. PowerShell را باز کن و دستور زیر را اجرا کن؛ چاپگر و تنظیمات درایور را انتخاب کن و پنجره را باز نگه دار. فایل رابط شامل کلید اتصال است؛ آن را به دیگران نده. دستور زیر جدیدترین فایل دانلودشده را اجرا می‌کند.</p>
-                    <pre dir="ltr" style={{whiteSpace:"pre-wrap",userSelect:"text"}}>{WINDOWS_CONNECTOR_COMMAND}</pre>
-                    <p dir="ltr">Prefix filter: ~ · Suffix filter: | · Track: 2 / 3</p>
-                    <button className="button secondary full" onClick={async () => {try {const state = await api("/api/windows/status"); notify((state.connected ? "متصل: " + state.machine + " · " + state.printer : "رابط ویندوز متصل نیست") + (state.job ? " — " + state.job.message : ""));} catch(err){notify((err as Error).message,true);}}}>بررسی اتصال و آخرین نتیجه</button>
+                    <p>چاپ پشت کارت، یک نسخه؛ شمارهٔ واردشده همراه کارت به رابط ویندوز ارسال می‌شود.</p>
+                    <button className="text-button" onClick={() => { setModal(null); setView("settings"); }}>تنظیمات اتصال و راه‌اندازی ویندوز</button>
                     <button className="button primary full" disabled={busy} onClick={submitWindowsMagnetic}>{busy ? "در حال ارسال…" : "چاپ پشت کارت و ارسال شماره به نوار مغناطیسی"}</button>
                     <p>در ویندوز شماره را پیش از چاپ تأیید کن. ارسال به درایور به معنی موفقیت رمزگذاری نیست؛ نتیجه را با کارت‌خوان مغناطیسی بازخوانی کن.</p>
                   </div>
@@ -2050,25 +2079,6 @@ function App() {
           </section>
         </div>
       )}
-      {showWindowsHelper && <aside className="windows-command-helper" dir="rtl" aria-label="دستور موقت پاورشل">
-        <div className="windows-command-helper-heading">
-          <strong>راه‌اندازی رابط ویندوز · موقت</strong>
-          <button type="button" aria-label="بستن راه‌اندازی رابط ویندوز" onClick={() => setShowWindowsHelper(false)}><X size={16} /></button>
-        </div>
-        <a href="/api/windows/download" download>۱. دانلود رابط ویندوز</a>
-        <label htmlFor="windows-connector-command">۲. این دستور را در PowerShell اجرا کن:</label>
-        <textarea id="windows-connector-command" dir="ltr" readOnly rows={3}
-          value={WINDOWS_CONNECTOR_COMMAND}
-          onFocus={(event) => event.currentTarget.select()} />
-        <button className="button secondary full" onClick={async () => {
-          const field = document.getElementById("windows-connector-command") as HTMLTextAreaElement;
-          try {
-            if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(field.value);
-            else { field.focus(); field.select(); if (!document.execCommand("copy")) throw new Error("manual"); }
-            notify("دستور پاورشل کپی شد؛ در ویندوز Paste کن.");
-          } catch { field.focus(); field.select(); notify("دستور انتخاب شد؛ برای کپی Ctrl+C بزن."); }
-        }}>کپی دستور PowerShell</button>
-      </aside>}
       {toast && (
         <div
           className={`toast ${toast.error ? "error" : ""}`}
