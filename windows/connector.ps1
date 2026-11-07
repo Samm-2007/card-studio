@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $config = '__CONFIG__' | ConvertFrom-Json
-Write-Host 'Card Studio Connector v3 - validated multi-track input'
+Write-Host 'Card Studio Connector v4 - admin-panel unattended issuance'
 Write-Host 'Server:' $config.url
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -63,7 +63,9 @@ while ($true) {
     foreach ($command in $job.commands) {
      if ($command -notmatch '^~[123][\x20-\x5F]{1,104}\|$') { throw 'Invalid native command.' }
     }
-    $choice = [Windows.Forms.MessageBox]::Show(('Print ONE card with these magnetic commands?'+"`n"+($job.commands -join "`n")+"`nVerify with a magnetic reader after printing."),'Confirm card','YesNo','Warning')
+    # Admin-panel issuance prints directly; Card Studio jobs still ask the operator.
+    $choice = if ($job.unattended -eq $true) { 'Yes' } else { [Windows.Forms.MessageBox]::Show(('Print ONE card with these magnetic commands?'+"`n"+($job.commands -join "`n")+"`nVerify with a magnetic reader after printing."),'Confirm card','YesNo','Warning') }
+    Write-Host ('Card job ' + $job.id + ': ' + ($job.commands -join ' '))
     if ($choice -eq 'Yes') {
      $bytes = [Convert]::FromBase64String(($job.image -split ',',2)[1])
      [CardStudioPrint]::Send($doc, $bytes, [string[]]$job.commands)

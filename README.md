@@ -204,3 +204,20 @@ In the print dialog select **ویندوز — چاپ پشت کارت + نوشت�
 The connector polls the authenticated site, receives one back image and the exact entered numeric card field (Persian/Arabic digits normalized, spaces removed, leading zeroes preserved), asks the Windows operator to confirm, and submits one copy through PrintDocument/native TextOut. No runtime or SDK download is needed on Windows PowerShell 5.1. The server never automatically retries a claimed card; if the connector crashes, check the Windows queue and resolve the physical card before restarting the site. Download a new connector after server restart or host address change. Choose the proper HiCo/LoCo setting in the driver. Driver submission is not proof of successful encoding: verify the card with a magnetic reader. Native Windows execution and physical encoding have not been tested on the development Mac.
 
 Reference for text extraction syntax: [HiTi driver manual, Magnetic encoding setting](https://update.hiti.com/Files/Manual/CS-222e_EN_UserManual.pdf). Actual availability depends on the installed CS-200e driver version.
+
+### Admin-panel card issuance (club-admin-panel «ایجاد کارت»)
+
+The club admin panel can print the fixed «حامی کارت مادر» template and write the member's club
+card number to Track 2 in one click. Start the server with LAN mode and the issuance settings:
+
+```sh
+CARD_STUDIO_ISSUE_KEY=<random 16+ chars> \
+CARD_STUDIO_ISSUE_ORIGINS=https://admin.example.com,http://localhost:3000 \
+bun run start:lan
+```
+
+Run the Windows connector (v4) as described above and keep it open. Jobs from `/api/issue`
+are marked unattended: the connector prints them directly without the confirmation dialog
+and sends the `~2<card-number>|` text command through the same driver path. Only listed
+origins, private/loopback peers and requests carrying `X-Card-Issue-Key` are accepted.
+The key is shipped to the admin browser, so treat it as a LAN-level secret and rotate it if leaked.

@@ -41,6 +41,22 @@ await chmod(bridgeKeyPath, 0o600);
 const bridgeKey = (await readFile(bridgeKeyPath, "utf8")).trim();
 if (!/^[0-9a-f-]{36}$/.test(bridgeKey)) throw new Error("Invalid saved Windows connector key.");
 const bridge = new WindowsBridge(bridgeKey);
+// Admin-panel card issuance: a cross-origin caller with a shared key submits one fixed-template card.
+const issueKey = (process.env.CARD_STUDIO_ISSUE_KEY ?? "").trim();
+const issueOrigins = (process.env.CARD_STUDIO_ISSUE_ORIGINS ?? "").split(",").map((o) => o.trim().replace(/\/$/, "")).filter(Boolean);
+if (issueKey && issueKey.length < 16) throw new Error("CARD_STUDIO_ISSUE_KEY must be at least 16 characters.");
+function issueCors(origin: string | null): Record<string, string> | null {
+  if (!issueKey || !origin || !issueOrigins.includes(origin)) return null;
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, X-Card-Issue-Key",
+    "Access-Control-Allow-Private-Network": "true",
+    "Access-Control-Max-Age": "600",
+    Vary: "Origin",
+    "Cache-Control": "no-store",
+  };
+}
 const buildDir = await mkdtemp(join(tmpdir(), "card-studio-web-"));
 async function buildClient() {
   const built = await Bun.build({
@@ -139,6 +155,24 @@ const server = Bun.serve({
   maxRequestBodySize: 12 * 1024 * 1024,
   async fetch(req, server) {
     const url = new URL(req.url);
+    if (url.pathname === "/api/issue" || url.pathname === "/api/issue/status") {
+      const cors = issueCors(req.headers.get("origin"));
+      if (!cors) return json({ error: "Card issuance is not enabled for this origin." }, 403);
+      const peer = server.requestIP(req)?.address ?? "";
+      if (!isLoopback(peer) && !isPrivateIPv4(peer.replace(/^::ffff:/, "")))
+        return Response.json({ error: "Only local network connections are allowed." }, { status: 403, headers: cors });
+      if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
+      if (req.headers.get("x-card-issue-key") !== issueKey)
+        return Response.json({ error: "کلید صدور کارت نامعتبر است." }, { status: 403, headers: cors });
+      try {
+        if (req.method === "GET" && url.pathname === "/api/issue/status") return Response.json(bridge.status(), { headers: cors });
+        if (req.method === "POST" && url.pathname === "/api/issue")
+          return Response.json(bridge.submit({ ...(await req.json()), unattended: true }), { headers: cors });
+        return Response.json({ error: "Not found" }, { status: 404, headers: cors });
+      } catch (err) {
+        return Response.json({ error: err instanceof Error ? err.message : "Something went wrong." }, { status: 400, headers: cors });
+      }
+    }
     const allowedHosts = ["127.0.0.1", "localhost", ...(lanEnabled ? lanAddresses() : [])].map((host) => `${host}:${port}`);
     if (!allowedRequest(req, allowedHosts))
       return json({ error: "This request is not from Card Studio." }, 403);
@@ -392,6 +426,7 @@ if (lanEnabled) {
   for (const address of lanAddresses()) console.log(`Windows / LAN: http://${address}:${server.port}/?layout=madar`);
   console.log(`LAN username: cardstudio · Password file: ${passwordPath}`);
 }
+if (issueKey) console.log(`Admin-panel card issuance enabled for: ${issueOrigins.join(", ") || "(no origins — set CARD_STUDIO_ISSUE_ORIGINS)"}`);
 const cleanup = async () => {
   sourceWatcher.close();
   server.stop();

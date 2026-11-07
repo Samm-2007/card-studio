@@ -14,7 +14,7 @@ type Agent = { id: string; machine: string; printer: string; lastSeen: number };
 type Job = {
   id: string; agentId: string; createdAt: number;
   status: "waiting" | "claimed" | "submitted" | "failed";
-  message: string; image?: string; track2?: string; fingerprint: string;
+  message: string; image?: string; track2?: string; fingerprint: string; unattended: boolean;
 };
 
 // Volatile, one-card queue. Claim exactly once; never retry an ambiguous native print.
@@ -55,7 +55,7 @@ export class WindowsBridge {
     if (!job) return { job: null };
     job.status = "claimed";
     job.message = "دریافت در ویندوز؛ منتظر تأیید اپراتور / درایور. دوباره ارسال نکنید.";
-    const payload = { id: job.id, image: job.image!, track2: job.track2!, commands: encodingCommands(job.track2!) };
+    const payload = { id: job.id, image: job.image!, track2: job.track2!, commands: encodingCommands(job.track2!), unattended: job.unattended };
     delete job.image; delete job.track2;
     return { job: payload };
   }
@@ -84,6 +84,7 @@ export class WindowsBridge {
     const job: Job = {
       id: input.id, agentId: this.agent.id, createdAt: now, status: "waiting",
       message: "منتظر دریافت توسط رابط ویندوز", image: input.image, track2, fingerprint,
+      unattended: input.unattended === true,
     };
     this.jobs.unshift(job); this.jobs.splice(50);
     return this.publicJob(job);
